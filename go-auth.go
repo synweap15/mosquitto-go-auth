@@ -83,7 +83,7 @@ func AuthPluginInit(keys []string, values []string, authOptsNum int) {
 
 	cmBackends := make(map[string]Backend)
 
-	//Initialize common struct with default and given values
+	//Initialize hashing struct with default and given values
 	authPlugin = AuthPlugin{
 		checkPrefix: false,
 		prefixes:    make(map[string]string),
@@ -481,7 +481,7 @@ func AuthUnpwdCheck(username, password, clientid string) bool {
 			if bename == pluginBackend {
 				authenticated = CheckPluginAuth(username, password, clientid)
 			} else {
-				// If the backend is JWT and the token was prefixed, then strip the token. If the token was passed without a prefix it will be handled in the common case.
+				// If the backend is JWT and the token was prefixed, then strip the token. If the token was passed without a prefix it will be handled in the hashing case.
 				if bename == jwtBackend {
 					prefix := getPrefixForBackend(bename)
 					username = strings.TrimPrefix(username, prefix+"_")
@@ -544,7 +544,7 @@ func AuthAclCheck(clientid, username, topic string, acc int) bool {
 			if bename == pluginBackend {
 				aclCheck = CheckPluginAcl(username, topic, clientid, acc)
 			} else {
-				// If the backend is JWT and the token was prefixed, then strip the token. If the token was passed without a prefix then it be handled in the common case.
+				// If the backend is JWT and the token was prefixed, then strip the token. If the token was passed without a prefix then it be handled in the hashing case.
 				if bename == jwtBackend {
 					prefix := getPrefixForBackend(bename)
 					username = strings.TrimPrefix(username, prefix+"_")

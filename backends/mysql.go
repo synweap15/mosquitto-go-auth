@@ -9,7 +9,7 @@ import (
 	"strings"
 
 	mq "github.com/go-sql-driver/mysql"
-	"github.com/iegomez/mosquitto-go-auth/common"
+	"github.com/iegomez/mosquitto-go-auth/hashing"
 	"github.com/jmoiron/sqlx"
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
@@ -94,7 +94,7 @@ func NewMysql(authOpts map[string]string, logLevel log.Level) (Mysql, error) {
 
 	if saltEncoding, ok := authOpts["mysql_salt_encoding"]; ok {
 		switch saltEncoding {
-		case common.Base64, common.UTF8:
+		case hashing.Base64, hashing.UTF8:
 			mysql.SaltEncoding = saltEncoding
 			log.Debugf("mysql backend: set salt encoding to: %s", saltEncoding)
 		default:
@@ -201,7 +201,7 @@ func NewMysql(authOpts map[string]string, logLevel log.Level) (Mysql, error) {
 	}
 
 	var err error
-	mysql.DB, err = common.OpenDatabase(msConfig.FormatDSN(), "mysql")
+	mysql.DB, err = OpenDatabase(msConfig.FormatDSN(), "mysql")
 
 	if err != nil {
 		return mysql, errors.Errorf("MySql backend error: couldn't open db: %s", err)
@@ -227,7 +227,7 @@ func (o Mysql) GetUser(username, password, clientid string) bool {
 		return false
 	}
 
-	if common.HashCompare(password, pwHash.String, o.SaltEncoding) {
+	if hashing.HashCompare(password, pwHash.String, o.SaltEncoding) {
 		return true
 	}
 
@@ -283,7 +283,7 @@ func (o Mysql) CheckAcl(username, topic, clientid string, acc int32) bool {
 	for _, acl := range acls {
 		aclTopic := strings.Replace(acl, "%c", clientid, -1)
 		aclTopic = strings.Replace(aclTopic, "%u", username, -1)
-		if common.TopicsMatch(aclTopic, topic) {
+		if TopicsMatch(aclTopic, topic) {
 			return true
 		}
 	}

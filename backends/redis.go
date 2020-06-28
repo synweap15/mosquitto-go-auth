@@ -9,7 +9,7 @@ import (
 	"time"
 
 	goredis "github.com/go-redis/redis/v8"
-	"github.com/iegomez/mosquitto-go-auth/common"
+	"github.com/iegomez/mosquitto-go-auth/hashing"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -76,7 +76,7 @@ func NewRedis(authOpts map[string]string, logLevel log.Level) (Redis, error) {
 
 	if saltEncoding, ok := authOpts["redis_salt_encoding"]; ok {
 		switch saltEncoding {
-		case common.Base64, common.UTF8:
+		case hashing.Base64, hashing.UTF8:
 			redis.SaltEncoding = saltEncoding
 			log.Debugf("redis backend: set salt encoding to: %s", saltEncoding)
 		default:
@@ -175,7 +175,7 @@ func (o Redis) getUser(username, password string) (bool, error) {
 		return false, err
 	}
 
-	if common.HashCompare(password, pwHash, o.SaltEncoding) {
+	if hashing.HashCompare(password, pwHash, o.SaltEncoding) {
 		return true, nil
 	}
 
@@ -264,8 +264,8 @@ func (o Redis) checkAcl(username, topic, clientid string, acc int32) (bool, erro
 			return false, err
 		}
 
-		//Get common subscribe acls.
-		commonAcls, err = o.conn.SMembers(o.ctx, "common:sacls").Result()
+		//Get hashing subscribe acls.
+		commonAcls, err = o.conn.SMembers(o.ctx, "hashing:sacls").Result()
 		if err != nil {
 			return false, err
 		}
@@ -281,12 +281,12 @@ func (o Redis) checkAcl(username, topic, clientid string, acc int32) (bool, erro
 			return false, err
 		}
 
-		//Get common read and readwrite acls
-		rAcls, err := o.conn.SMembers(o.ctx, "common:racls").Result()
+		//Get hashing read and readwrite acls
+		rAcls, err := o.conn.SMembers(o.ctx, "hashing:racls").Result()
 		if err != nil {
 			return false, err
 		}
-		rwAcls, err := o.conn.SMembers(o.ctx, "common:rwacls").Result()
+		rwAcls, err := o.conn.SMembers(o.ctx, "hashing:rwacls").Result()
 		if err != nil {
 			return false, err
 		}
@@ -309,12 +309,12 @@ func (o Redis) checkAcl(username, topic, clientid string, acc int32) (bool, erro
 			return false, err
 		}
 
-		//Get common write and readwrite acls
-		wAcls, err := o.conn.SMembers(o.ctx, "common:wacls").Result()
+		//Get hashing write and readwrite acls
+		wAcls, err := o.conn.SMembers(o.ctx, "hashing:wacls").Result()
 		if err != nil {
 			return false, err
 		}
-		rwAcls, err := o.conn.SMembers(o.ctx, "common:rwacls").Result()
+		rwAcls, err := o.conn.SMembers(o.ctx, "hashing:rwacls").Result()
 		if err != nil {
 			return false, err
 		}
@@ -330,7 +330,7 @@ func (o Redis) checkAcl(username, topic, clientid string, acc int32) (bool, erro
 
 	//Now loop through acls looking for a match.
 	for _, acl := range acls {
-		if common.TopicsMatch(acl, topic) {
+		if TopicsMatch(acl, topic) {
 			return true, nil
 		}
 	}
@@ -338,7 +338,7 @@ func (o Redis) checkAcl(username, topic, clientid string, acc int32) (bool, erro
 	for _, acl := range commonAcls {
 		aclTopic := strings.Replace(acl, "%c", clientid, -1)
 		aclTopic = strings.Replace(aclTopic, "%u", username, -1)
-		if common.TopicsMatch(aclTopic, topic) {
+		if TopicsMatch(aclTopic, topic) {
 			return true, nil
 		}
 	}

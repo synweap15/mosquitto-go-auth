@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/iegomez/mosquitto-go-auth/common"
+	"github.com/iegomez/mosquitto-go-auth/hashing"
 	"github.com/jmoiron/sqlx"
 	_ "github.com/lib/pq"
 	"github.com/pkg/errors"
@@ -79,7 +79,7 @@ func NewPostgres(authOpts map[string]string, logLevel log.Level) (Postgres, erro
 
 	if saltEncoding, ok := authOpts["pg_salt_encoding"]; ok {
 		switch saltEncoding {
-		case common.Base64, common.UTF8:
+		case hashing.Base64, hashing.UTF8:
 			postgres.SaltEncoding = saltEncoding
 			log.Debugf("postgres backend: set salt encoding to: %s", saltEncoding)
 		default:
@@ -145,7 +145,7 @@ func NewPostgres(authOpts map[string]string, logLevel log.Level) (Postgres, erro
 	}
 
 	var err error
-	postgres.DB, err = common.OpenDatabase(connStr, "postgres")
+	postgres.DB, err = OpenDatabase(connStr, "postgres")
 
 	if err != nil {
 		return postgres, errors.Errorf("PG backend error: couldn't open db: %s", err)
@@ -171,7 +171,7 @@ func (o Postgres) GetUser(username, password, clientid string) bool {
 		return false
 	}
 
-	if common.HashCompare(password, pwHash.String, o.SaltEncoding) {
+	if hashing.HashCompare(password, pwHash.String, o.SaltEncoding) {
 		return true
 	}
 
@@ -228,7 +228,7 @@ func (o Postgres) CheckAcl(username, topic, clientid string, acc int32) bool {
 	for _, acl := range acls {
 		aclTopic := strings.Replace(acl, "%c", clientid, -1)
 		aclTopic = strings.Replace(aclTopic, "%u", username, -1)
-		if common.TopicsMatch(aclTopic, topic) {
+		if TopicsMatch(aclTopic, topic) {
 			return true
 		}
 	}

@@ -74,7 +74,7 @@ func testRedis(ctx context.Context, t *testing.T, authOpts map[string]string) {
 	clientID := "test_client"
 	writeAcl := "write/test"
 	readWriteAcl := "test/readwrite/1"
-	commonTopic := "common/test/topic"
+	commonTopic := "hashing/test/topic"
 
 	redis.conn.SAdd(ctx, username+":racls", strictAcl)
 
@@ -93,12 +93,12 @@ func testRedis(ctx context.Context, t *testing.T, authOpts map[string]string) {
 	assert.False(t, tt1)
 	assert.False(t, tt2)
 
-	//Now check against common patterns.
-	redis.conn.SAdd(ctx, "common:racls", userPattern)
+	//Now check against hashing patterns.
+	redis.conn.SAdd(ctx, "hashing:racls", userPattern)
 	tt1 = redis.CheckAcl(username, "test/test", clientID, MOSQ_ACL_READ)
 	assert.True(t, tt1)
 
-	redis.conn.SAdd(ctx, "common:racls", clientPattern)
+	redis.conn.SAdd(ctx, "hashing:racls", clientPattern)
 
 	tt1 = redis.CheckAcl(username, "test/test_client", clientID, MOSQ_ACL_READ)
 	assert.True(t, tt1)
@@ -129,8 +129,8 @@ func testRedis(ctx context.Context, t *testing.T, authOpts map[string]string) {
 	assert.True(t, tt1)
 	assert.True(t, tt2)
 
-	//Now add a common read acl to check against.
-	redis.conn.SAdd(ctx, "common:racls", commonTopic)
+	//Now add a hashing read acl to check against.
+	redis.conn.SAdd(ctx, "hashing:racls", commonTopic)
 	tt1 = redis.CheckAcl("unknown", commonTopic, clientID, MOSQ_ACL_READ)
 	assert.True(t, tt1)
 
@@ -151,7 +151,7 @@ func testRedis(ctx context.Context, t *testing.T, authOpts map[string]string) {
 	assert.False(t, tt2)
 
 	topic = "commonsubscribable/topic"
-	redis.conn.SAdd(ctx, "common:sacls", topic)
+	redis.conn.SAdd(ctx, "hashing:sacls", topic)
 	tt1 = redis.CheckAcl(username, topic, clientID, MOSQ_ACL_SUBSCRIBE)
 	tt2 = redis.CheckAcl(username, topic, clientID, MOSQ_ACL_READ)
 	assert.True(t, tt1)

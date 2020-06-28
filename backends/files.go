@@ -6,7 +6,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/iegomez/mosquitto-go-auth/common"
+	"github.com/iegomez/mosquitto-go-auth/hashing"
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
 )
@@ -64,7 +64,7 @@ func NewFiles(authOpts map[string]string, logLevel log.Level) (Files, error) {
 
 	if saltEncoding, ok := authOpts["salt_encoding"]; ok {
 		switch saltEncoding {
-		case common.Base64, common.UTF8:
+		case hashing.Base64, hashing.UTF8:
 			files.SaltEncoding = saltEncoding
 			log.Debugf("files backend: set salt encoding to: %s", saltEncoding)
 		default:
@@ -306,7 +306,7 @@ func (o Files) GetUser(username, password, clientid string) bool {
 		return false
 	}
 
-	if common.HashCompare(password, fileUser.Password, o.SaltEncoding) {
+	if hashing.HashCompare(password, fileUser.Password, o.SaltEncoding) {
 		return true
 	}
 
@@ -331,10 +331,10 @@ func (o Files) CheckAcl(username, topic, clientid string, acc int32) bool {
 
 	fileUser, ok := o.Users[username]
 
-	//If user exists, check against his acls and common ones. If not, check against common acls only.
+	//If user exists, check against his acls and hashing ones. If not, check against hashing acls only.
 	if ok {
 		for _, aclRecord := range fileUser.AclRecords {
-			if common.TopicsMatch(aclRecord.Topic, topic) && (acc == int32(aclRecord.Acc) || int32(aclRecord.Acc) == MOSQ_ACL_READWRITE || (acc == MOSQ_ACL_SUBSCRIBE && topic != "#" && (int32(aclRecord.Acc) == MOSQ_ACL_READ || int32(aclRecord.Acc) == MOSQ_ACL_SUBSCRIBE))) {
+			if TopicsMatch(aclRecord.Topic, topic) && (acc == int32(aclRecord.Acc) || int32(aclRecord.Acc) == MOSQ_ACL_READWRITE || (acc == MOSQ_ACL_SUBSCRIBE && topic != "#" && (int32(aclRecord.Acc) == MOSQ_ACL_READ || int32(aclRecord.Acc) == MOSQ_ACL_SUBSCRIBE))) {
 				return true
 			}
 		}
@@ -343,7 +343,7 @@ func (o Files) CheckAcl(username, topic, clientid string, acc int32) bool {
 		//Replace all occurrences of %c for clientid and %u for username
 		aclTopic := strings.Replace(aclRecord.Topic, "%c", clientid, -1)
 		aclTopic = strings.Replace(aclTopic, "%u", username, -1)
-		if common.TopicsMatch(aclTopic, topic) && (acc == int32(aclRecord.Acc) || int32(aclRecord.Acc) == MOSQ_ACL_READWRITE || (acc == MOSQ_ACL_SUBSCRIBE && topic != "#" && (int32(aclRecord.Acc) == MOSQ_ACL_READ || int32(aclRecord.Acc) == MOSQ_ACL_SUBSCRIBE))) {
+		if TopicsMatch(aclTopic, topic) && (acc == int32(aclRecord.Acc) || int32(aclRecord.Acc) == MOSQ_ACL_READWRITE || (acc == MOSQ_ACL_SUBSCRIBE && topic != "#" && (int32(aclRecord.Acc) == MOSQ_ACL_READ || int32(aclRecord.Acc) == MOSQ_ACL_SUBSCRIBE))) {
 			return true
 		}
 	}

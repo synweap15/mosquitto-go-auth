@@ -55,6 +55,7 @@ const (
 	mongoBackend    = "mongo"
 	pluginBackend   = "plugin"
 	grpcBackend     = "grpc"
+	signalBackend   = "signal"
 )
 
 //Use a map of bools instead of empty structs so we may disable plugins easily.
@@ -69,6 +70,7 @@ var allowedBackends = map[string]bool{
 	mongoBackend:    true,
 	pluginBackend:   true,
 	grpcBackend:     true,
+	signalBackend:   true,
 }
 
 var backends []string          //List of selected backends.
@@ -324,11 +326,19 @@ func AuthPluginInit(keys []string, values []string, authOptsNum int) {
 					log.Infof("Backend registered: %s", beIface.GetName())
 					cmBackends[grpcBackend] = beIface.(bes.GRPC)
 				}
+			case signalBackend:
+				beIface, err = bes.NewSignal(authOpts, authPlugin.logLevel)
+				if err != nil {
+					log.Fatalf("Backend register error: couldn't initialize %s backend with error %s.", bename, err)
+				} else {
+					log.Infof("Backend registered: %s", beIface.GetName())
+					cmBackends[signalBackend] = beIface.(bes.Signal)
+				}
 			}
 		}
 	}
 
-	if cache, ok := authOpts["cache"]; ok && strings.Replace(cache, " ", "", -1) == "true" {
+	if useCache, ok := authOpts["cache"]; ok && strings.Replace(useCache, " ", "", -1) == "true" {
 		log.Info("redisCache activated")
 		authPlugin.useCache = true
 	} else {

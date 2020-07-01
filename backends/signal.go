@@ -171,14 +171,16 @@ func (o Signal) GetUser(username, password, clientid string) bool {
 	// check if user exists in the database
 	var userIdResult sql.NullInt64
 	err := mysql.DB.Get(&userIdResult, o.UserQuery, username)
-	if err != nil {
-		log.Errorf("DB Get error: %s", err)
+	if err == nil {
+		// User already exists, return false, let other backends handle it
+		log.Info("User does exists, releasing for other backends")
 		return false
-	}
-
-	// if does exist, return false, let other backends handle it
-	if userIdResult.Valid {
-		log.Info("User already exists, releasing for other backends")
+	} else if err == sql.ErrNoRows {
+		// if does not exist exist
+		log.Info("User does not exists, creating..")
+	} else {
+		// Some generic error
+		log.Errorf("DB Get error: %s", err)
 		return false
 	}
 

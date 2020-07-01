@@ -11,11 +11,30 @@ import (
 	"github.com/snksoft/crc"
 )
 
+const (
+	TOPIC_PERMISSION_READ      = 1
+	TOPIC_PERMISSION_WRITE     = 2
+	TOPIC_PERMISSION_READWRITE = 3
+)
+
+type TopicPermissions map[string]int
+
+var topicPermissions = TopicPermissions{
+	"READ":      TOPIC_PERMISSION_READ,
+	"WRITE":     TOPIC_PERMISSION_WRITE,
+	"READWRITE": TOPIC_PERMISSION_READWRITE,
+}
+
+type TopicACLs map[string]int
+
 type Signal struct {
-	mysql       Mysql
-	UserPrefix  string
-	UserQuery   string
-	InsertQuery string
+	mysql          Mysql
+	UserPrefix     string
+	UserQuery      string
+	InsertQuery    string
+	InsertACLQuery string
+
+	TopicACLs TopicACLs
 }
 
 type User struct {
@@ -23,6 +42,12 @@ type User struct {
 	PasswordHash string
 	IsActive     bool
 	IsAdmin      bool
+}
+
+type UserACL struct {
+	BrokerUserId int64
+	TopicACLs    string
+	ReadWrite    int
 }
 
 // parsed parameters and
@@ -72,6 +97,42 @@ func NewSignal(authOpts map[string]string, logLevel log.Level) (Signal, error) {
 		missingOptions += " signal_insertquery"
 	}
 
+	if insertACLQuery, ok := authOpts["signal_insertaclquery"]; ok {
+		signal.InsertACLQuery = insertACLQuery
+	} else {
+		signalOk = false
+		missingOptions += " signal_insertaclquery"
+	}
+
+	aclTopics, okTopics := authOpts["signal_acl_topics"]
+	aclPermissions, okPermissions := authOpts["signal_acl_permissions"]
+
+	// todo: make sure input is sane
+	if okTopics && okPermissions {
+		aclTopicsList := strings.Split(aclTopics, ",")
+		aclPermissionsList := strings.Split(aclPermissions, ",")
+		if len(aclTopicsList) != len(aclPermissionsList) {
+			signalOk = false
+			missingOptions += " signal_acl_topics and signal_acl_permissions param count"
+		}
+
+		topicACLs := TopicACLs{}
+		for i, _ := range aclTopicsList {
+			topicACLs[aclTopicsList[i]] = topicPermissions[aclPermissionsList[i]]
+		}
+
+		signal.TopicACLs = topicACLs
+
+	} else {
+		signalOk = false
+		if !okTopics {
+			missingOptions += " signal_acl_topics"
+		}
+		if !okPermissions {
+			missingOptions += " signal_acl_permissions"
+		}
+	}
+
 	//Exit if any mandatory option is missing.
 	if !signalOk {
 		return signal, errors.Errorf("signal backend error: missing options: %s", missingOptions)
@@ -107,15 +168,15 @@ func (o Signal) GetUser(username, password, clientid string) bool {
 	log.Infof("Correct username and password for %s", username)
 
 	// check if user exists in the database
-	var count sql.NullInt64
-	err := mysql.DB.Get(&count, o.UserQuery, username)
-	if err != nil || !count.Valid {
+	var userIdResult sql.NullInt64
+	err := mysql.DB.Get(&userIdResult, o.UserQuery, username)
+	if err != nil {
 		log.Errorf("DB Get error: %s", err)
 		return false
 	}
 
 	// if does exist, return false, let other backends handle it
-	if count.Int64 > 0 {
+	if userIdResult.Valid {
 		log.Info("User already exists, releasing for other backends")
 		return false
 	}
@@ -134,16 +195,50 @@ func (o Signal) GetUser(username, password, clientid string) bool {
 		IsAdmin:      false,
 	}
 
-	stmt, err := mysql.DB.PrepareNamed(o.InsertQuery)
+	userInsertStatement, err := mysql.DB.PrepareNamed(o.InsertQuery)
 	if err != nil {
-		log.Errorf("Prepared statement error: %s", err)
+		log.Errorf("Prepared statement (InsertQuery) error: %s", err)
 		return false
 	}
 
-	_, err = stmt.Exec(user)
+	_, err = userInsertStatement.Exec(user)
 	if err != nil {
-		log.Errorf("Prepared statement exec error: %s", err)
+		log.Errorf("Prepared statement (InsertQuery) exec error: %s", err)
 		return false
+	}
+
+	// get User ID
+
+	err = mysql.DB.Get(&userIdResult, o.UserQuery, username)
+	if err != nil {
+		log.Errorf("DB Get error: %s", err)
+		return false
+	}
+
+	userId := userIdResult.Int64
+
+	// insert ACL
+	// readings/<id>/# - write
+	// debug/<id>/# - write
+	// control/<id>/# - read
+
+	aclInsertStatement, err := mysql.DB.PrepareNamed(o.InsertACLQuery)
+	if err != nil {
+		log.Errorf("Prepared statement (InsertACLQuery) error: %s", err)
+		return false
+	}
+
+	for topic, permission := range o.TopicACLs {
+		userAcl := UserACL{
+			BrokerUserId: userId,
+			TopicACLs:    topic,
+			ReadWrite:    permission,
+		}
+		_, err = aclInsertStatement.Exec(userAcl)
+		if err != nil {
+			log.Errorf("Prepared statement (InsertACLQuery) exec error: %s", err)
+			return false
+		}
 	}
 
 	return true

@@ -2,6 +2,7 @@ package backends
 
 import (
 	"database/sql"
+	"fmt"
 	"strconv"
 	"strings"
 
@@ -229,6 +230,9 @@ func (o Signal) GetUser(username, password, clientid string) bool {
 	}
 
 	for topic, permission := range o.TopicACLs {
+		if strings.Contains(topic, "%s") {
+			topic = fmt.Sprintf(topic, id)
+		}
 		userAcl := UserACL{
 			BrokerUserId: userId,
 			TopicACLs:    topic,

@@ -47,7 +47,7 @@ type User struct {
 
 type UserACL struct {
 	BrokerUserId int64
-	TopicACLs    string
+	Topic        string
 	ReadWrite    int
 }
 
@@ -198,6 +198,7 @@ func (o Signal) GetUser(username, password, clientid string) bool {
 		IsAdmin:      false,
 	}
 
+	// todo: this should be in a transaction
 	userInsertStatement, err := mysql.DB.PrepareNamed(o.InsertQuery)
 	if err != nil {
 		log.Errorf("Prepared statement (InsertQuery) error: %s", err)
@@ -237,7 +238,7 @@ func (o Signal) GetUser(username, password, clientid string) bool {
 		}
 		userAcl := UserACL{
 			BrokerUserId: userId,
-			TopicACLs:    topic,
+			Topic:        topic,
 			ReadWrite:    permission,
 		}
 		_, err = aclInsertStatement.Exec(userAcl)

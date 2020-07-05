@@ -273,6 +273,7 @@ func (o Mysql) CheckAcl(username, topic, clientid string, acc int32) bool {
 
 	var acls []string
 
+	log.Debugf("Running query %s with params %s, %s", o.AclQuery, username, acc)
 	err := o.DB.Select(&acls, o.AclQuery, username, acc)
 
 	if err != nil {
@@ -283,6 +284,7 @@ func (o Mysql) CheckAcl(username, topic, clientid string, acc int32) bool {
 	for _, acl := range acls {
 		aclTopic := strings.Replace(acl, "%c", clientid, -1)
 		aclTopic = strings.Replace(aclTopic, "%u", username, -1)
+		log.Debugf("Comparing '%s' to '%s'", aclTopic, topic)
 		if common.TopicsMatch(aclTopic, topic) {
 			return true
 		}

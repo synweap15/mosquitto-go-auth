@@ -3,6 +3,7 @@ package backends
 import (
 	"database/sql"
 	"fmt"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -161,6 +162,15 @@ func (o Signal) GetUser(username, password, clientid string) bool {
 	}
 
 	id := username[5:]
+	// Make sure there are no disallowed characters in the ID
+	matched, err := regexp.Match(`([a-zA-Z0-9 \-]+)`, []byte(id))
+	if err != nil {
+		log.Errorf("Regex: %s", err)
+	}
+	if !matched {
+		log.Infof("Regex: username %s does not fit the matching criteria", id)
+		return false
+	}
 	if CRC32Hash(id) != password {
 		log.Infof("Incorrect username and password for %s", username)
 		return false
@@ -170,7 +180,7 @@ func (o Signal) GetUser(username, password, clientid string) bool {
 
 	// check if user exists in the database
 	var userIdResult sql.NullInt64
-	err := mysql.DB.Get(&userIdResult, o.UserQuery, username)
+	err = mysql.DB.Get(&userIdResult, o.UserQuery, username)
 	if err == nil {
 		// User already exists, return false, let other backends handle it
 		log.Info("User does exists, releasing for other backends")

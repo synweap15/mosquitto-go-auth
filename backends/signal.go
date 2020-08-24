@@ -23,6 +23,8 @@ const (
 	TOPIC_PERMISSION_READ_WRITE_SUBSCRIBE = 7
 )
 
+const TOPIC_PERMISSIONS_DEFAULT_KEY = "_default_"
+
 type TopicPermissions map[string]int
 
 var topicPermissions = TopicPermissions{
@@ -36,6 +38,7 @@ var topicPermissions = TopicPermissions{
 }
 
 type TopicACLs map[string]int
+type PrefixToTopicACLs map[string]TopicACLs
 
 type Signal struct {
 	mysql          Mysql
@@ -44,7 +47,7 @@ type Signal struct {
 	InsertQuery    string
 	InsertACLQuery string
 
-	TopicACLs TopicACLs
+	PrefixToTopicACLs PrefixToTopicACLs
 }
 
 type User struct {
@@ -114,33 +117,41 @@ func NewSignal(authOpts map[string]string, logLevel log.Level) (Signal, error) {
 		missingOptions += " signal_insertaclquery"
 	}
 
-	aclTopics, okTopics := authOpts["signal_acl_topics"]
-	aclPermissions, okPermissions := authOpts["signal_acl_permissions"]
+	// aclRolesAll, okRoles := authOpts["signal_acl_roles"]
+	aclRolesPrefixAll, okRolesPrefix := authOpts["signal_acl_roles_prefix"]
+	aclTopicsAll, okTopics := authOpts["signal_acl_topics"]
+	aclPermissionsAll, okPermissions := authOpts["signal_acl_permissions"]
 
 	// todo: make sure input is sane
-	if okTopics && okPermissions {
-		aclTopicsList := strings.Split(aclTopics, ",")
-		aclPermissionsList := strings.Split(aclPermissions, ",")
-		if len(aclTopicsList) != len(aclPermissionsList) {
-			signalOk = false
-			missingOptions += " signal_acl_topics and signal_acl_permissions param count"
+	if okRolesPrefix && okTopics && okPermissions {
+		aclRolesPrefix := strings.Split(aclRolesPrefixAll, ";")
+		aclTopics := strings.Split(aclTopicsAll, ";")
+		aclPermissions := strings.Split(aclPermissionsAll, ";")
+
+		signal.PrefixToTopicACLs = PrefixToTopicACLs{}
+
+		for index, prefix := range aclRolesPrefix {
+			aclTopicsList := strings.Split(aclTopics[index], ",")
+			aclPermissionsList := strings.Split(aclPermissions[index], ",")
+			if len(aclTopicsList) != len(aclPermissionsList) {
+				signalOk = false
+				missingOptions += " signal_acl_topics and signal_acl_permissions param count"
+			}
+
+			topicACLs := TopicACLs{}
+			for i, _ := range aclTopicsList {
+				topicACLs[aclTopicsList[i]] = topicPermissions[aclPermissionsList[i]]
+			}
+			signal.PrefixToTopicACLs[prefix] = topicACLs
 		}
-
-		topicACLs := TopicACLs{}
-		for i, _ := range aclTopicsList {
-			topicACLs[aclTopicsList[i]] = topicPermissions[aclPermissionsList[i]]
-		}
-
-		signal.TopicACLs = topicACLs
-
 	} else {
 		signalOk = false
-		if !okTopics {
-			missingOptions += " signal_acl_topics"
-		}
-		if !okPermissions {
-			missingOptions += " signal_acl_permissions"
-		}
+		missingOptions += " signal_acl_roles"
+	}
+
+	if _, ok := signal.PrefixToTopicACLs[TOPIC_PERMISSIONS_DEFAULT_KEY]; !ok {
+		signalOk = false
+		missingOptions += " default_key"
 	}
 
 	//Exit if any mandatory option is missing.
@@ -156,6 +167,23 @@ func NewSignal(authOpts map[string]string, logLevel log.Level) (Signal, error) {
 	}
 
 	return signal, nil
+}
+
+func (o Signal) GetTopicACLsByUsername(username string) (TopicACLs, error) {
+	var correctTopic TopicACLs
+	if defaultACLs, ok := o.PrefixToTopicACLs[TOPIC_PERMISSIONS_DEFAULT_KEY]; ok {
+		correctTopic = defaultACLs
+	} else {
+		return nil, errors.Errorf("There's no default TopicACL!")
+	}
+
+	for topicPrefix, topicACL := range o.PrefixToTopicACLs {
+		if strings.HasPrefix(username, o.UserPrefix+topicPrefix) {
+			correctTopic = topicACL
+		}
+	}
+
+	return correctTopic, nil
 }
 
 func (o Signal) GetUser(username, password, clientid string) bool {
@@ -250,7 +278,12 @@ func (o Signal) GetUser(username, password, clientid string) bool {
 		return false
 	}
 
-	for topic, permission := range o.TopicACLs {
+	topicACLs, err := o.GetTopicACLsByUsername(username)
+	if err != nil {
+		log.Errorf("GetTopicACLsByUsername error: %s", err)
+	}
+
+	for topic, permission := range topicACLs {
 		if strings.Contains(topic, "%s") {
 			topic = fmt.Sprintf(topic, id)
 		}
